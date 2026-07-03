@@ -4,7 +4,7 @@
   name: Deploy to Production
   on:
     push:
-      branches: [main]
+      branches: [master]
   
   # PROBLEM 1: No permissions block
   # Without this, GITHUB_TOKEN has write access to the entire repository by default.
@@ -15,10 +15,10 @@
       runs-on: ubuntu-latest
       steps:
   
-        # PROBLEM 2: @main is not pinned to a specific version
+        # PROBLEM 2: @master is not pinned to a specific version
         # If the action maintainer's account gets hacked and they push malicious code
-        # to the @main tag, it runs inside your pipeline automatically
-        - uses: actions/checkout@main
+        # to the @master tag, it runs inside your pipeline automatically
+        - uses: actions/checkout@master
   
         - name: Run tests
           run: npm test
