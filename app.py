@@ -9,6 +9,8 @@ from flask import Flask, request, jsonify
       user_id = request.args.get('user_id')
       conn = sqlite3.connect('payments.db')
       cursor = conn.cursor()
+
+      # testing for SQL Injection vulnerability
   
       # VULNERABILITY: SQL Injection
       # user_id goes straight into the query with no sanitisation
