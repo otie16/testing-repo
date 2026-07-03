@@ -16,7 +16,7 @@ jobs:
     name: Secrets Detection
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68  # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           fetch-depth: 0
 
@@ -30,7 +30,7 @@ jobs:
     name: Static Code Analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Semgrep — find code vulnerabilities
         uses: semgrep/semgrep-action@v1
@@ -42,7 +42,7 @@ jobs:
     name: Container Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Build Docker image
         run: docker build -t ironside-api:${{ github.sha }} .
@@ -70,7 +70,7 @@ jobs:
     environment: production
 
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Deploy
         run: |
