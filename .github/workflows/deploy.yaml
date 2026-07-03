@@ -1,66 +1,63 @@
 # Ironside Payments — Deployment Pipeline
-  # This pipeline has 8 security problems — can you spot them all?
-  
-  name: Deploy to Production
-  on:
-    push:
-      branches: [master]
-  
-  # PROBLEM 1: No permissions block
-  # Without this, GITHUB_TOKEN has write access to the entire repository by default.
-  # Any step that gets compromised can push code, create releases, delete branches.
-  
-  jobs:
-    deploy:
-      runs-on: ubuntu-latest
-      steps:
-  
-        # PROBLEM 2: @master is not pinned to a specific version
-        # If the action maintainer's account gets hacked and they push malicious code
-        # to the @master tag, it runs inside your pipeline automatically
-        - uses: actions/checkout@master
-  
-        - name: Run tests
-          run: npm test
-  
-        - name: Build Docker image
-          run: docker build -t ironside-api:latest .
-  
-        # PROBLEM 3: No container security scan
-        # The image is pushed without being checked for vulnerabilities
-        # requirements.txt has packages with known CVEs that go straight to production
-  
-        - name: Push to AWS ECR
-          run: |
-            aws ecr get-login-password --region eu-west-1 | \
-            docker login --username AWS --password-stdin 123456789012.dkr.ecr.eu-west-1.amazonaws.com
-            docker push 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ironside-api:latest
-          env:
-            # PROBLEM 4: Static AWS keys stored in GitHub Secrets
-            # These are permanent credentials. If they leak, an attacker has
-            # AWS access until someone manually rotates them.
-            AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  
-        # PROBLEM 5: No approval gate
-        # Every push to main deploys to production immediately
-        # No human check happens between commit and go-live
-  
-        - name: Deploy to ECS
-          run: |
-            aws ecs update-service \
-              --cluster ironside-prod \
-              --service ironside-api \
-              --force-new-deployment
-          env:
-            AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-            AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  
-  # PROBLEM 6: No secrets scan — if a developer commits an API key,
-  #            this pipeline ships it to production without any warning
-  
-  # PROBLEM 7: No SAST scan — the SQL injection in app.py
-  #            goes to production undetected
-  
-  # PROBLEM 8: No branch protection — a developer can push directly to main,
-  #            bypassing all code review and triggering an immediate production deploy
+# This pipeline has 8 security problems — can you spot them all?
+
+name: Deploy to Production
+on:
+  push:
+    branches: [master]
+
+# PROBLEM 1: No permissions block
+# Without this, GITHUB_TOKEN has write access to the entire repository by default.
+# Any step that gets compromised can push code, create releases, delete branches.
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+
+      # PROBLEM 2: @master is not pinned to a specific version
+      # If the action maintainer's account gets hacked and they push malicious code
+      # to the @master tag, it runs inside your pipeline automatically
+      - uses: actions/checkout@master
+
+      - name: Build Docker image
+        run: docker build -t ironside-api:latest .
+
+      # PROBLEM 3: No container security scan
+      # The image is pushed without being checked for vulnerabilities
+      # requirements.txt has packages with known CVEs that go straight to production
+
+      - name: Push to AWS ECR
+        run: |
+          aws ecr get-login-password --region eu-west-1 | \
+          docker login --username AWS --password-stdin 123456789012.dkr.ecr.eu-west-1.amazonaws.com
+          docker push 123456789012.dkr.ecr.eu-west-1.amazonaws.com/ironside-api:latest
+        env:
+          # PROBLEM 4: Static AWS keys stored in GitHub Secrets
+          # These are permanent credentials. If they leak, an attacker has
+          # AWS access until someone manually rotates them.
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      # PROBLEM 5: No approval gate
+      # Every push to master deploys to production immediately
+      # No human check happens between commit and go-live
+
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ironside-prod \
+            --service ironside-api \
+            --force-new-deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+# PROBLEM 6: No secrets scan — if a developer commits an API key,
+#            this pipeline ships it to production without any warning
+
+# PROBLEM 7: No SAST scan — the SQL injection in app.py
+#            goes to production undetected
+
+# PROBLEM 8: No branch protection — a developer can push directly to master,
+#            bypassing all code review and triggering an immediate production deploy

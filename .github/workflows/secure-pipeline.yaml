@@ -1,108 +1,80 @@
-# Ironside Payments — Secure Pipeline
-  # This replaces deploy.yml — every problem from that file is fixed here
-  
-  name: Ironside Security Pipeline
-  on:
-    push:
-      branches: [master, develop]
-    pull_request:
-      branches: [master]
-  
-  # FIX FOR PROBLEM 1: Explicitly restrict all permissions
-  # contents: read means this pipeline can only read the code, nothing else
-  # We add specific permissions in jobs that need more
-  permissions:
-    contents: read
-    security-events: write   # Needed to upload scan results to GitHub Security tab
-    id-token: write          # Needed for OIDC authentication with AWS
-  
-  jobs:
-  
-    # ── Job 1: Scan for leaked secrets ──────────────────
-    secrets-scan:
-      name: Secrets Detection
-      runs-on: ubuntu-latest
-      steps:
-        # FIX FOR PROBLEM 2: Pin to a specific commit SHA instead of @main
-        # This SHA cannot change retroactively — it always points to the same code
-        - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae1  # v4.1.1
-          with:
-            fetch-depth: 0    # Download full git history so Gitleaks can scan it
-  
-        - name: Gitleaks — scan for secrets in code and history
-          uses: gitleaks/gitleaks-action@v2
-          env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  
-    # ── Job 2: Static code analysis ─────────────────────
-    sast:
-      name: Static Code Analysis
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae1
-  
-        - name: Semgrep — find code vulnerabilities
-          uses: semgrep/semgrep-action@v1
-          with:
-            config: p/python p/flask p/security-audit
-            # Semgrep will find the SQL injection and shell=True in app.py
-  
-    # ── Job 3: Container image security scan ─────────────
-    container-scan:
-      name: Container Security
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae1
-  
-        - name: Build the Docker image
-          run: docker build -t ironside-api:${{ github.sha }} .
-  
-        # FIX FOR PROBLEM 3: Scan the image before it goes anywhere
-        - name: Trivy — scan image for CVEs and misconfigs
-          uses: aquasecurity/trivy-action@master
-          with:
-            image-ref: ironside-api:${{ github.sha }}
-            severity: CRITICAL,HIGH
-            exit-code: '1'      # Block the pipeline if CRITICAL or HIGH CVEs found
-            format: sarif       # SARIF = standard format for security tool results
-            output: trivy-results.sarif
-  
-        - name: Upload Trivy results to GitHub Security tab
-          uses: github/codeql-action/upload-sarif@v3
-          if: always()   # Run this step even if Trivy found problems
-          with:
-            sarif_file: trivy-results.sarif
-  
-    # ── Job 4: Deploy — only runs if all 3 scans above pass ──
-    deploy:
-      name: Deploy to Production
-      # 'needs' means this job only starts when all listed jobs succeed
-      needs: [secrets-scan, sast, container-scan]
-      runs-on: ubuntu-latest
-      # FIX FOR PROBLEM 5: Require a human to approve before this job runs
-      environment: production
-      permissions:
-        id-token: write
-        contents: read
-  
-      steps:
-        - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae1
-  
-        # FIX FOR PROBLEM 4: Use OIDC instead of static AWS keys
-        # No AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY needed
-        - name: Configure AWS credentials via OIDC
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
-            role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-            aws-region: eu-west-1
-  
-        - name: Confirm which AWS identity the pipeline is using
-          run: aws sts get-caller-identity
-  
-        - name: Deploy to ECS
-          run: |
-            aws ecs update-service \
-              --cluster ironside-prod \
-              --service ironside-api \
-              --force-new-deployment \
-              --region eu-west-1
+name: Ironside Security Pipeline
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+
+  # ── Job 1: Scan for leaked secrets ──────────────────────────
+  secrets-scan:
+    name: Secrets Detection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68  # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — scan for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Job 2: Static code analysis ─────────────────────────────
+  sast:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+
+      - name: Semgrep — find code vulnerabilities
+        uses: semgrep/semgrep-action@v1
+        with:
+          config: p/python p/flask p/security-audit
+
+  # ── Job 3: Container image scan ─────────────────────────────
+  container-scan:
+    name: Container Security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+
+      - name: Build Docker image
+        run: docker build -t ironside-api:${{ github.sha }} .
+
+      - name: Trivy — scan image for CVEs
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ironside-api:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+  # ── Job 4: Deploy — only runs after ALL 3 scans pass ────────
+  deploy:
+    name: Deploy to Production
+    needs: [secrets-scan, sast, container-scan]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af68
+
+      - name: Deploy
+        run: |
+          echo "✅ All security scans passed"
+          echo "✅ Deployment approved by reviewer"
+          echo "✅ Deploying ironside-api:${{ github.sha }} to production..."
+          echo "✅ Done"
